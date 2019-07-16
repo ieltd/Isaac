@@ -1,0 +1,960 @@
+Imports Microsoft.VisualBasic
+Imports System.Net.Mail
+Imports System.IO
+Imports System.Net
+Imports System.Data.SqlClient
+Imports System.Data
+Imports UtilityServices
+Imports DataLayerServices
+Imports InsightDataServices
+Imports System.Web.UI.WebControls
+'Imports System.Web.UI.WebControls.BaseCompareValidator
+Imports System.Data.Sql
+Imports System.Configuration
+Imports System.Web
+Imports System.Web.UI
+Imports System
+'Imports System.Windows.Forms
+Imports System.Collections.Generic
+' Below added for EWS (Mail Server) Update - Isaac
+Imports System.Threading.Tasks
+Imports Microsoft.Exchange.WebServices.Data
+Imports database
+Imports System.Linq
+Imports System.Text.RegularExpressions
+'Imports Outlook = Microsoft.Office.Interop.Outlook
+' below for testing EWS
+Imports EASendMail = InsightDataServices
+Imports System.Net.Mail.SmtpClient
+
+Partial Class index
+
+    Inherits System.Web.UI.Page
+    Public database As database 'database name will change depending on what you named your class page
+
+
+    Public CustomValidators As CustomValidator
+    Dim util As New UtilityServices.Utility
+    Dim util2 As New UtilityServices.StringServices
+    Dim objStreamReader As StreamReader
+    Dim MailMessage As New MailMessage
+    Dim client As SmtpClient
+    Dim strMachineName As String
+    Dim strTemplate As String
+    Dim strEnvironment As String
+    Dim email_From As MailAddress
+    Dim strUserName As String ' = LCase(Server.UrlDecode(Request.Cookies("insightuser")("username")))
+    Dim strUserEmail As String
+    Dim objInsightData As New InsightDataServices.InsightData
+    Dim strConn As String = objInsightData.GetConnectString("insight_connection_string")
+    Dim strDomain As String = System.Web.Configuration.WebConfigurationManager.AppSettings(("Domain"))
+
+    Dim daAdapter As New SqlDataAdapter
+    Private _this As UI.Page
+
+
+    Protected Sub Page_Init(sender As Object, e As EventArgs) Handles Me.Init
+
+#If DEBUG Then
+
+        HttpContext.Current.Response.Cookies("insightuser")("guest") = ""
+        HttpContext.Current.Response.Cookies("insightuser")("id") = "22665"
+        HttpContext.Current.Response.Cookies("insightuser")("lname") = "Johnson"
+        HttpContext.Current.Response.Cookies("insightuser")("fname") = "Isaac"
+        HttpContext.Current.Response.Cookies("insightuser")("wholename") = "Isaac Johnson"
+        HttpContext.Current.Response.Cookies("insightuser")("extension") = "4844971263"
+        HttpContext.Current.Response.Cookies("insightuser")("departmentid") = "227"
+        HttpContext.Current.Response.Cookies("insightuser")("lob") = "302"
+        HttpContext.Current.Response.Cookies("insightuser")("birthday_month") = "0"
+        HttpContext.Current.Response.Cookies("insightuser")("birthday_day") = "0"
+        HttpContext.Current.Response.Cookies("insightuser")("managerid") = "21286"
+        HttpContext.Current.Response.Cookies("insightuser")("username") = "ij25405"
+        HttpContext.Current.Response.Cookies("insightuser")("email") = "IJohnson@amerihealthcaritas.com"
+        HttpContext.Current.Response.Cookies("insightuser")("is_manager") = "0"
+        HttpContext.Current.Response.Cookies("insightuser")("ismanager") = "0"
+        HttpContext.Current.Response.Cookies("insightuser")("building") = "0"
+        HttpContext.Current.Response.Cookies("insightuser")("floor") = "0"
+        HttpContext.Current.Response.Cookies("insightuser")("cost_center") = "351"
+        HttpContext.Current.Response.Cookies("insightuser")("costcenter") = "351"
+        HttpContext.Current.Response.Cookies("insightuser")("cubeoffice_no") = "123456"
+        HttpContext.Current.Response.Cookies("insightuser")("mailstop") = "- None Selected -"
+        HttpContext.Current.Response.Cookies("insightuser")("deptname") = ""
+        HttpContext.Current.Response.Cookies("insightuser")("url") = ""
+        HttpContext.Current.Response.Cookies("insightuser")("area") = "484"
+        HttpContext.Current.Response.Cookies("insightuser")("managerwholename") = "Lawrence Raffle"
+        HttpContext.Current.Response.Cookies("insightuser")("managerphone") = "215/937-8142"
+        HttpContext.Current.Response.Cookies("insightuser")("managerusername") = "LR22638"
+        HttpContext.Current.Response.Cookies("insightuser")("ps_deptid") = "227"
+        HttpContext.Current.Response.Cookies("insightuser")("psdeptid") = "227"
+        HttpContext.Current.Response.Cookies("insightuser")("ps_deptname") = "Digital Experience"
+        HttpContext.Current.Response.Cookies("insightuser")("psdeptname") = "Digital Experience"
+        HttpContext.Current.Response.Cookies("insightuser")("jobtitle") = "Digital Developer"
+        HttpContext.Current.Response.Cookies("insightuser")("emplid") = "ij25405"
+        HttpContext.Current.Response.Cookies("insightuser")("company") = "KEY"
+        HttpContext.Current.Response.Cookies("insightuser")("departid") = "51"
+        HttpContext.Current.Response.Cookies("insightuser")("is_userlive") = "1"
+        HttpContext.Current.Response.Cookies("insightuser")("fsla") = ""
+
+#End If
+
+    End Sub
+
+    Private Property this As UI.Page
+        Get
+            Return _this
+        End Get
+        Set(value As UI.Page)
+            _this = value
+        End Set
+    End Property
+
+
+    Protected Sub Page_Load(ByVal sender As Object, ByVal e As System.EventArgs) Handles MyBase.Load
+
+        If Not Page.IsPostBack Then
+
+            Load_Requestor()
+            Load_Manager()
+            Load_Location()
+            Load_Start_Time()
+            Load_Finish_Time()
+            ' Load_Lob()
+            Load_Items()
+            GetUserData()
+            lblDate.Text = Date.Today()
+            ' Multi Select
+
+            'BindListBox()
+        End If
+
+
+    End Sub
+
+
+    Sub GetUserData()
+        'Dim strUserName, strFullName As String
+
+        Try
+
+            'Get user information from cookies and check if user id cookie is set
+
+            If (Not Request.Cookies("insightuser") Is Nothing) AndAlso (Not Request.Cookies("insightuser")("id") Is Nothing) Then
+                ddlName.SelectedValue = Server.UrlDecode(Request.Cookies("insightuser")("id"))
+            Else
+                'ddlName.SelectedValue = "<Enter Your Name>"
+            End If
+            If (Not Request.Cookies("insightuser") Is Nothing) AndAlso (Not Request.Cookies("insightuser")("managerid") Is Nothing) Then
+                ddlManager.SelectedValue = Server.UrlDecode(Request.Cookies("insightuser")("managerid"))
+            Else
+                'ddlName.SelectedValue = "<Enter Your Name>"
+            End If
+            If (Not Request.Cookies("insightuser") Is Nothing) AndAlso (Not Request.Cookies("insightuser")("extension") Is Nothing) Then
+                txtExt.Text = Server.UrlDecode(Request.Cookies("insightuser")("extension"))
+                ' txtExt.Text = "<Enter Your Extension>"
+            End If
+            If (Not Request.Cookies("insightuser") Is Nothing) AndAlso (Not Request.Cookies("insightuser")("id") Is Nothing) Then
+                txtsubmitter.Text = Server.UrlDecode(Request.Cookies("insightuser")("id"))
+                ' txtExt.Text = "<Enter Your Extension>"
+            End If
+            If (Not Request.Cookies("insightuser") Is Nothing) AndAlso (Not Request.Cookies("insightuser")("managerid") Is Nothing) Then
+                txtManager.Text = Server.UrlDecode(Request.Cookies("insightuser")("managerid"))
+                ' txtExt.Text = "<Enter Your Extension>"
+            End If
+
+            If (Not Request.Cookies("insightuser") Is Nothing) AndAlso (Not Request.Cookies("insightuser")("costcenter") Is Nothing) Then
+                txtCostCenter.Text = Request.Cookies("insightuser")("costcenter") & " - " & Request.Cookies("insightuser")("psdeptname") & " (LOB " & Request.Cookies("insightuser")("lob") & "00)"
+            Else
+                ' txtExt.Text = "<Enter Your Extension>"
+            End If
+
+        Catch ex As Exception
+            'Send the email to the developer if there is an error 
+            Dim errFrom As String = Server.UrlDecode(Request.Cookies("insightuser")("email"))
+            Dim errTo As String = "WebAdministrator@amerihealthcaritas.com"
+            Dim errSubject As String = "ERROR: Web Maintenance Request (" & strDomain & ")"
+            Dim errBody As String = "During GetUserData...<br><br>" & Convert.ToString(ex)
+            'SendEmail(errFrom, errTo, errSubject, errBody, 2)
+        End Try
+
+    End Sub
+
+    Sub Load_Requestor()
+        Dim objData As New DataLayerServices.SqlDataServices("S")
+        Dim objReader As SqlDataReader
+
+        Try
+
+            objData.SetConnection(strConn)
+            objReader = objData.SelectRecord("insight_select_all_associates")
+            If objReader.HasRows Then
+
+                ddlName.Items.Add(New ListItem("-- No Requestor Selected --", "0"))
+                ddlName.SelectedValue = ""
+                Do While objReader.Read
+                    ddlName.Items.Add(New ListItem(objReader("name"), objReader("id")))
+
+                Loop
+            End If
+            objReader.Close()
+        Catch ex As Exception
+            Dim utilErrEmail As New UtilityServices.Err_Email
+            utilErrEmail.Email_Error = "Audio-Visual-Request-Form (" & strDomain & "): Load_Requestor"
+            utilErrEmail.Email_ErrorText = ex.ToString
+            utilErrEmail.SendEmail()
+            Response.Redirect("error.htm")
+        End Try
+    End Sub
+
+    ' Code remove for LOB 7/23/18 - Isaac
+    ' Sub Load_Lob()
+    'Dim objData As New DataLayerServices.SqlDataServices("S")
+    'Dim objReader As SqlDataReader
+
+    '   Try
+
+    '        objData.SetConnection(strConn)
+    '        objReader = objData.SelectRecord("av_get_active_lob")
+    '       If objReader.HasRows Then
+    '
+    '
+    '           cblLOB.SelectedValue = ""
+    '          Do While objReader.Read
+    '             cblLOB.Items.Add(New ListItem(objReader("short_name_insight")))
+    '        Loop
+    '
+    '       End If
+    '      objReader.Close()
+    ' Catch ex As Exception
+    'Dim utilErrEmail As New UtilityServices.Err_Email
+    '          utilErrEmail.Email_Error = "Audio-Visual-Request-Form (" & strDomain & "): Load_Lob"
+    '    utilErrEmail.Email_ErrorText = ex.ToString
+    '   utilErrEmail.SendEmail()
+    '  Response.Redirect("error.htm")
+    ' End Try
+    'End Sub
+    Sub Load_Items()
+        Dim objData As New DataLayerServices.SqlDataServices("S")
+        Dim objReader As SqlDataReader
+
+        Try
+
+            objData.SetConnection(strConn)
+            objReader = objData.SelectRecord("av_get_active_meeting_items")
+            If objReader.HasRows Then
+
+
+                cblItems.SelectedValue = ""
+                Do While objReader.Read
+
+                    cblItems.Items.Add(New ListItem(util.HandleDBNull(objReader("item_name"))))
+                Loop
+
+            End If
+
+            objReader.Close()
+        Catch ex As Exception
+            Dim utilErrEmail As New UtilityServices.Err_Email
+            utilErrEmail.Email_Error = "Audio-Visual-Request-Form (" & strDomain & "): Load_Items"
+            utilErrEmail.Email_ErrorText = ex.ToString
+            utilErrEmail.SendEmail()
+            Response.Redirect("error.htm")
+        End Try
+    End Sub
+
+
+    Sub Load_Start_Time()
+        Dim objData As New DataLayerServices.SqlDataServices("S")
+        Dim objReader As SqlDataReader
+
+        Try
+
+            objData.SetConnection(strConn)
+            objReader = objData.SelectRecord("time_8_8_30")
+            If objReader.HasRows Then
+
+                ddlStartTime.Items.Add(New ListItem("-- No Start Time Selected --", "0"))
+                ddlStartTime.SelectedValue = ""
+                Do While objReader.Read
+                    ddlStartTime.Items.Add(New ListItem(objReader("time_inc"), objReader("time_id")))
+
+                Loop
+            End If
+            objReader.Close()
+        Catch ex As Exception
+            Dim utilErrEmail As New UtilityServices.Err_Email
+            utilErrEmail.Email_Error = "Audio-Visual-Request-Form (" & strDomain & "): Load_StartTime"
+            utilErrEmail.Email_ErrorText = ex.ToString
+            utilErrEmail.SendEmail()
+            Response.Redirect("error.htm")
+        End Try
+    End Sub
+
+
+    Sub Load_Finish_Time()
+        Dim objData As New DataLayerServices.SqlDataServices("S")
+        Dim objReader As SqlDataReader
+
+        Try
+
+            objData.SetConnection(strConn)
+            objReader = objData.SelectRecord("time_8_8_30")
+            If objReader.HasRows Then
+
+                ddlFinishTime.Items.Add(New ListItem("-- No Finish Time Selected --", "0"))
+                ddlFinishTime.SelectedValue = ""
+                Do While objReader.Read
+                    ddlFinishTime.Items.Add(New ListItem(objReader("time_inc"), objReader("time_id")))
+
+                Loop
+            End If
+            objReader.Close()
+        Catch ex As Exception
+            Dim utilErrEmail As New UtilityServices.Err_Email
+            utilErrEmail.Email_Error = "Audio-Visual-Request-Form (" & strDomain & "): Load_FinishTime"
+            utilErrEmail.Email_ErrorText = ex.ToString
+            utilErrEmail.SendEmail()
+            Response.Redirect("error.htm")
+        End Try
+    End Sub
+
+    Sub Load_Manager()
+
+        Dim objData As New DataLayerServices.SqlDataServices("S")
+        Dim objReader As SqlDataReader
+
+        Try
+
+            objData.SetConnection(strConn)
+            objReader = objData.SelectRecord("av_get_all_managers")
+            If objReader.HasRows Then
+
+                ddlManager.Items.Add(New ListItem("-- No Manager Selected --", "0"))
+                Do While objReader.Read
+                    ddlManager.Items.Add(New ListItem(objReader("lname") & " , " & objReader("fname"), objReader("id")))
+
+                Loop
+            End If
+            ddlManager.SelectedIndex = -1
+            objReader.Close()
+        Catch ex As Exception
+            Dim utilErrEmail As New UtilityServices.Err_Email
+            utilErrEmail.Email_Error = "Audio-Visual-Request-Form (" & strDomain & "): Load_Manager"
+            utilErrEmail.Email_ErrorText = ex.ToString
+            utilErrEmail.SendEmail()
+            Response.Redirect("error.htm")
+        End Try
+
+
+
+    End Sub
+    Sub Load_Location()
+        Dim objData As New DataLayerServices.SqlDataServices("S")
+        Dim objReader As SqlDataReader
+
+        Try
+
+            objData.SetConnection(strConn)
+            objReader = objData.SelectRecord("av_get_active_conference_rooms")
+            If objReader.HasRows Then
+
+                ddlLoc.Items.Add(New ListItem("--- No Location Selected ---", "0"))
+                ddlLoc.SelectedValue = ""
+                Do While objReader.Read
+                    ddlLoc.Items.Add(New ListItem(objReader("conference_room_name") & " - " & objReader("building"), objReader("audio_visual_conference_room_id")))
+                    ' Populate List Box 7/15/2018 - Isaac
+                    If objReader("order_ID") <> 9999 Then
+                        ListBox1.Items.Add(New ListItem(objReader("conference_room_name") & " - " & objReader("building"), objReader("audio_visual_conference_room_id")))
+                    End If
+                    UCase(util.HandleDBNull(objReader("conference_room_name")))
+                Loop
+
+            End If
+            objReader.Close()
+        Catch ex As Exception
+            Dim utilErrEmail As New UtilityServices.Err_Email
+            utilErrEmail.Email_Error = "Audio-Visual-Request-Form (" & strDomain & "): Load_Location"
+            utilErrEmail.Email_ErrorText = ex.ToString
+            utilErrEmail.SendEmail()
+            Response.Redirect("error.htm")
+        End Try
+    End Sub
+
+
+    Protected Sub btnSubmit_Click(ByVal sender As Object, ByVal e As System.EventArgs) Handles btnSubmit.Click
+
+        'this code gets the items from the dynamic check boxes
+        ' Code removed for LOB - 7/23/2018 - Isaac
+        Dim success As Integer
+        ' Dim lob As ListItem
+        Dim lob As String = " "
+        Dim MyChar() As Char = {","}
+        Dim lobList As String = ""
+
+        'Dim lobContactList As String = ""
+        Try
+            'For Each lob In cblLOB.Items
+            'If lob.Selected = True Then
+            'trims comma from begining of string
+            'If lobList.Length = 0 Then
+
+            'If lob.Text.Contains(",") Then
+            'lobList = lob.Text.Substring(0, lob.Text.IndexOf(","))
+            ' Else
+            'lobList = lob.Text
+            'End If
+            'Else
+
+            'If lob.Text.Contains(",") Then
+            'lobList = lobList.TrimStart(MyChar) + ", " + lob.Text.Substring(0, lob.Text.IndexOf(","))
+            'Else
+            'lobList = lobList.TrimStart(MyChar) + ", " + lob.Text
+            'End If
+            ' End If
+
+            'Dim objData As New DataLayerServices.SqlDataServices("S")
+            ' Dim objReader As SqlDataReader
+
+            'objData.SetConnection(strConn)
+            'If lob.Text.Contains(",") Then
+            'objData.CreateParameter("@lob", "V", "10", "I", lob.Text.Substring(0, lob.Text.IndexOf(",")))
+            ' Else
+            'objData.CreateParameter("@lob", "V", "10", "I", lob.Text)
+            ' End If
+            'objReader = objData.SelectRecord("av_get_lob_contact")
+            'If objReader.HasRows Then
+
+            'Do While objReader.Read
+            'If lobContactList.Length = 0 Then
+            'lobContactList = lobContactList + objReader("lob_contact_emails")
+            'Else
+            ' lobContactList = lobContactList + ", " + objReader("lob_contact_emails")
+            'End If
+            ' Loop
+            'End If
+            'objReader.Close()
+            ' End If
+            ' Next
+
+            Dim item As ListItem
+            Dim itemList As String = ""
+
+
+            For Each item In cblItems.Items
+                If item.Selected = True Then
+                    'trims comma from begining of string
+                    itemList = itemList.TrimStart(MyChar) + ", " + item.Text
+                    ' Below removed  to fix duplicate in email display
+                    ' itemList = itemList + item.Text
+                End If
+
+                'end if 
+            Next
+
+            Dim database As New database(txtsubmitter.Text, ddlName.SelectedValue, txtDate.Text, txtMeetTo.Text, ddlStartTime.SelectedValue, ddlFinishTime.SelectedValue, ddlLoc.SelectedValue, txtOtherLoc.Text, RadioButtonList1.SelectedValue, lobList, itemList, txtComments.Text, txtExtClient.Text)
+            ' Added code below 7/5/2018
+            success = database.insert_request(strConn)
+            ' end add
+            If success = 0 Then
+                Throw New Exception("Insert Procedure Failed.")
+            End If
+            objStreamReader = File.OpenText(Server.MapPath("email_template.htm"))
+            strTemplate = objStreamReader.ReadToEnd
+
+            objStreamReader.Close()
+
+            'Insert E-mail details
+            '************
+            'adds values to -mail template
+            '************
+            strTemplate = Replace(strTemplate, "#requestor#", util2.StripBadCharacters(ddlName.SelectedItem.Text))
+            strTemplate = Replace(strTemplate, "#manager#", util2.StripBadCharacters(ddlManager.SelectedItem.Text))
+            strTemplate = Replace(strTemplate, "#cost_center#", (txtCostCenter.Text))
+            strTemplate = Replace(strTemplate, "#phone#", util2.StripBadCharacters(txtExt.Text))
+            strTemplate = Replace(strTemplate, "#date#", txtDate.Text)
+            strTemplate = Replace(strTemplate, "#enddate#", txtMeetTo.Text)
+            strTemplate = Replace(strTemplate, "#recurring#", RadioButtonList1.SelectedItem.Text)
+            strTemplate = Replace(strTemplate, "#from#", (ddlStartTime.SelectedItem.Text))
+            strTemplate = Replace(strTemplate, "#to#", (ddlFinishTime.SelectedItem.Text))
+            strTemplate = Replace(strTemplate, "#location#", (ddlLoc.SelectedItem.Text))
+            strTemplate = Replace(strTemplate, "#Otherlocation#", util2.StripBadCharacters(txtOtherLoc.Text))
+            strTemplate = Replace(strTemplate, "#items#", (itemList))
+            strTemplate = Replace(strTemplate, "#LOB#", (lobList))
+            strTemplate = Replace(strTemplate, "#Video Conference#", (label1.Text))
+            strTemplate = Replace(strTemplate, "#External Client#", (txtExtClient.Text))
+            strTemplate = Replace(strTemplate, "#comments#", util2.StripBadCharacters(txtComments.Text))
+            strTemplate = Replace(strTemplate, "#agree#", (cbAgree.Checked))
+
+            With MailMessage
+                ' remove below  for local testing
+                '.From = New System.Net.Mail.MailAddress("webserver@amerihealthcaritas.com")
+                ' Changed 8/20/2018 Isaac
+                .From = New MailAddress(Server.UrlDecode(Request.Cookies("insightuser")("email")))
+                .IsBodyHtml = True
+                .Body = strTemplate
+                .To.Add(Server.UrlDecode(Request.Cookies("insightuser")("email")))
+            End With
+
+            If strDomain = "prod" Then
+                MailMessage.Subject = "IDS Audio/Visual Request Confirmation"
+                MailMessage.To.Add(System.Web.Configuration.WebConfigurationManager.AppSettings("Email_List_Prod"))
+                'If lobContactList.Length > 0 Then
+                ' MailMessage.To.Add(lobContactList)
+                'End If
+            Else
+                MailMessage.Subject = "IDS Audio/Visual Request Confirmation"
+                MailMessage.To.Add(System.Web.Configuration.WebConfigurationManager.AppSettings("Email_list_Dev"))
+            End If
+            'removed for local testing
+            ' get the email server and send the email
+            client = New SmtpClient
+            client.Host = System.Web.Configuration.WebConfigurationManager.AppSettings("SMTP_Host")
+            client.Send(MailMessage)
+
+
+
+            If database.recurring_meeting > 0 Then
+
+                Do While (DateDiff("d", database.start_date, database.end_date) >= 0)
+
+                    If (database.recurring_meeting = 1) Then
+                        database.start_date = DateAdd("d", 1, database.start_date)
+                    ElseIf database.recurring_meeting = 2 Then
+                        database.start_date = DateAdd("d", 7, database.start_date)
+                    ElseIf database.recurring_meeting = 3 Then
+                        database.start_date = DateAdd("d", 14, database.start_date)
+                    Else
+                        database.recurring_meeting = 4
+                        database.start_date = DateAdd("m", 1, database.start_date)
+
+                    End If
+
+                    If (DateDiff("d", database.start_date, database.end_date) >= 0) Then
+                        success = database.insert_request(strConn)
+                        If success = 0 Then
+                            Throw New Exception("Insert Procedure Failed.")
+                        End If
+                    End If
+
+                Loop
+
+            End If
+        Catch ex As Exception
+            Dim utilErrEmail As New UtilityServices.Err_Email
+            utilErrEmail.Email_Error = "AV Request Form (" & strDomain & "): Insert_Request"
+            utilErrEmail.Email_ErrorText = ex.ToString
+            utilErrEmail.SendEmail()
+            Response.Redirect("error.htm")
+        End Try
+
+        'Dim mTitle As String = "Test Meeting"
+        'Dim myEmail As String = "ijohnson@amerihealthcaritas.com"
+
+        ' Using EWS - Mail Server
+        Set_Calendar(txtDate.Text.ToString, ddlStartTime.SelectedItem.Text.ToString, ddlFinishTime.SelectedItem.Text.ToString)
+
+        Response.Redirect("confirm.htm")
+
+    End Sub
+
+
+
+    Protected Sub cblItems_SelectedIndexChanged(ByVal sender As Object, ByVal e As System.EventArgs) Handles cblItems.SelectedIndexChanged
+        'this hides the LOB then shows LOB only when Video Conference option is shown
+        Me.cblLOB.Enabled = False
+        Me.cblLOB.Visible = False
+        Me.lblVidCon.Enabled = False
+        Me.lblVidCon.Visible = False
+        Me.lblPcProjectors.Visible = False
+        Me.lblLaptops.Visible = False
+        For Each item As ListItem In cblItems.Items
+            ' Eliminated Video-Conf Learning and Development Center and Video Conf - Keysone Court 6/20/2018
+
+            If item.Value = "Video Conference" Then
+                If item.Selected Then
+                    Me.vidlblVidConSel1.Visible = True
+                    Me.lblVidConSel1.Enabled = True
+                    divListBox1.Visible = True
+                    Me.ListBox1.Visible = True
+                    Me.divButtons.Visible = True
+                    Me.Button1.Visible = True
+                    Me.Button1.Enabled = True
+                    Me.Button2.Visible = True
+                    Me.Button2.Enabled = True
+                    Me.label1.Visible = True
+
+
+                    ' Exit For
+                Else
+                    Me.vidlblVidConSel1.Visible = False
+                    Me.lblVidConSel1.Enabled = False
+                    divListBox1.Visible = False
+                    Me.ListBox1.Visible = False
+                    Me.divButtons.Visible = False
+                    Me.Button1.Visible = False
+                    Me.Button2.Visible = False
+                    Me.label1.Visible = False
+                    Me.Button1.Enabled = False
+
+                End If
+            End If
+            ' Set video external Popup 6/21/2018
+            If item.Value = "Video with external client - requires advanced notice and setup assistance" Then
+                If item.Selected Then
+                    divextClient.Visible = True
+                    lblExtClient.Visible = True
+                    txtExtClient.Visible = True
+                    txtExtClient.Enabled = True
+
+
+                    'Exit For
+                Else
+                    lblExtClient.Visible = False
+                    txtExtClient.Visible = False
+                    txtExtClient.Enabled = False
+
+                End If
+            End If
+            ' changed PC-Projector to Tabletop projector updated table audi_visual_request_item 6/21/2018
+            If item.Value = "Tabletop Projector" Then
+                If item.Selected Then
+                    Me.lblPcProjectors.Visible = True
+
+
+                End If
+            End If
+            If item.Value = "Laptop" Then
+                If item.Selected Then
+                    Me.lblLaptops.Visible = True
+
+
+                End If
+            End If
+
+        Next
+
+
+    End Sub
+    Protected Sub RadioButtonList1_SelectedIndexChanged(ByVal sender As Object, ByVal e As System.EventArgs) Handles RadioButtonList1.SelectedIndexChanged
+        'this hides second calander until a recurring daily,weekly, or bi-weekly is selected
+        Me.lblMeetTo.Visible = False
+        Me.txtMeetTo.Visible = False
+        Me.imgMeetTo.Visible = False
+        'Me.RequiredFieldValidator2.Enabled = False
+        Me.CompareValidator2.Enabled = False
+        Me.imgMeetTo.Visible = False
+        txtMeetTo.Text = txtDate.Text
+        For Each item As ListItem In RadioButtonList1.Items
+            If item.Value = "0" Then
+                If item.Selected Then
+                    Me.lblMonthly.Visible = False
+                    Me.lblMeetTo.Visible = False
+                    Me.txtMeetTo.Visible = False
+                    Me.imgMeetTo.Visible = False
+                    'Me.RequiredFieldValidator2.Enabled = True
+                    Me.CompareValidator2.Enabled = True
+                    'this sets a default value to the recurring text box of the actual date 
+                    'of the meeting and allows a value to be passed to the data base
+                    txtMeetTo.Text = txtDate.Text
+                Else
+                    Me.lblMonthly.Visible = False
+                    Me.lblMeetTo.Visible = True
+                    Me.txtMeetTo.Visible = True
+                    Me.imgMeetTo.Visible = True
+                    'Me.RequiredFieldValidator2.Enabled = True
+                    Me.CompareValidator2.Enabled = True
+                    txtMeetTo.Text = txtDate.Text
+                End If
+            End If
+        Next
+
+
+
+        'this enables message for monthly meetings
+        For Each item As ListItem In RadioButtonList1.Items
+            If item.Value = "4" Then
+                If item.Selected Then
+
+                    Me.lblMeetTo.Visible = True
+                    Me.txtMeetTo.Visible = True
+                    Me.imgMeetTo.Visible = True
+                    'Me.RequiredFieldValidator2.Enabled = True
+                    Me.CompareValidator2.Enabled = True
+                    Me.lblMonthly.Visible = True
+                End If
+            End If
+        Next
+        ''If txtMeetTo.Text <= txtDate.Text Then
+        'MsgBox("Please select a Recurring Meeting Date To Greater than Meeting Date.")
+        'End If
+
+    End Sub
+
+
+
+    Protected Sub ddlLoc_SelectedIndexChanged(ByVal sender As Object, ByVal e As System.EventArgs) Handles ddlLoc.SelectedIndexChanged
+        'this hides second calander until a recurring daily,weekly, or bi-weekly is selected
+        Me.lblOtherLoc.Visible = False
+        Me.txtOtherLoc.Visible = False
+        Me.txtOtherLoc.Enabled = False
+        Me.lblOtherLocation.Visible = False
+
+        Me.RequiredFieldValidator11.Enabled = False
+        For Each item As ListItem In ddlLoc.Items()
+            '29 on production 31 here
+            If item.Value = "29" Then
+                If item.Selected Then
+
+                    Me.lblOtherLoc.Visible = True
+                    Me.txtOtherLoc.Visible = True
+                    Me.txtOtherLoc.Enabled = True
+                    Me.lblOtherLocation.Visible = True
+
+                    Me.RequiredFieldValidator11.Enabled = True
+                Else
+                    Me.lblOtherLoc.Visible = False
+                    Me.txtOtherLoc.Visible = False
+                    Me.txtOtherLoc.Enabled = False
+                    Me.lblOtherLocation.Visible = False
+
+                    Me.RequiredFieldValidator11.Enabled = False
+                End If
+            End If
+        Next
+        'lets end user know not all items may be available for room 601
+        Me.lblOtherLocation3.Visible = False
+        For Each item As ListItem In ddlLoc.Items()
+
+            If item.Value = "27" Then
+                If item.Selected Then
+
+                    Me.lblOtherLocation3.Visible = True
+                Else
+                    Me.lblOtherLocation3.Visible = False
+
+
+                End If
+            End If
+        Next
+        'lets end user know not all items may be available for room 603
+        Me.lblOtherLocation1.Visible = False
+        For Each item As ListItem In ddlLoc.Items()
+
+            If item.Value = "28" Then
+                If item.Selected Then
+
+                    Me.lblOtherLocation1.Visible = True
+                Else
+                    Me.lblOtherLocation1.Visible = False
+
+
+                End If
+            End If
+        Next
+
+        'this lets end user know if they want to combine rooms in Learning and Developement to add
+        'to the comment section. 24=Hospitality
+        Me.lblOtherLocation4.Visible = False
+        For Each item As ListItem In ddlLoc.Items()
+
+            If item.Value = "24" Then
+                If item.Selected Then
+
+                    Me.lblOtherLocation4.Visible = True
+                Else
+                    Me.lblOtherLocation4.Visible = False
+
+
+                End If
+            End If
+        Next
+
+        'this lets end user know if they want to combine rooms in Learning and Developement to add
+        'to the comment section. 25=Stewardship
+        Me.lblOtherLocation5.Visible = False
+        For Each item As ListItem In ddlLoc.Items()
+
+            If item.Value = "25" Then
+                If item.Selected Then
+
+                    Me.lblOtherLocation5.Visible = True
+                Else
+                    Me.lblOtherLocation5.Visible = False
+
+
+                End If
+            End If
+        Next
+
+        'this lets end user know if they want to combine rooms in Learning and Developement to add
+        'to the comment section. 26=Care of Poor
+        Me.lblOtherLocation2.Visible = False
+        For Each item As ListItem In ddlLoc.Items()
+
+            If item.Value = "26" Then
+                If item.Selected Then
+
+                    Me.lblOtherLocation2.Visible = True
+                Else
+                    Me.lblOtherLocation2.Visible = False
+
+
+                End If
+            End If
+        Next
+
+    End Sub
+    Public Sub Button1_Click(sender As Object, e As EventArgs) Handles Button1.Click
+        Dim message As String = ""
+
+
+        For Each item As ListItem In ListBox1.Items
+
+            If (item.Selected) Then
+
+                label1.Text += "<br><b>" + item.Text + "</b></br>"
+            End If
+        Next
+    End Sub
+
+    Protected Sub Button2_Click(sender As Object, e As EventArgs) Handles Button2.Click
+
+        For Each item As ListItem In ListBox1.Items
+
+            If (item.Selected) Then
+                label1.Text = " "
+                item.Selected = False
+            End If
+        Next
+
+    End Sub
+    Public Sub Set_Calendar(meetingDate As String, startTime As String, endTime As String)
+        ' EWS Calendar Update - Isaac 8/2018
+
+        Dim AttendeesDev As String = System.Web.Configuration.WebConfigurationManager.AppSettings("Email_list_DevString").Substring(0, System.Web.Configuration.WebConfigurationManager.AppSettings("Email_list_DevString").LastIndexOf(","))
+        Dim AttendeesProd As String = System.Web.Configuration.WebConfigurationManager.AppSettings("Email_List_ProdString").Substring(0, System.Web.Configuration.WebConfigurationManager.AppSettings("Email_List_ProdString").LastIndexOf(","))
+        Dim AttendeesArrDev As String() = AttendeesDev.Split(New Char() {","c})
+        Dim AttendeesArrProd As String() = AttendeesDev.Split(New Char() {","c})
+
+
+
+
+        Dim oDate As DateTime = Convert.ToDateTime(meetingDate)
+        Try
+            Dim service As ExchangeService = New ExchangeService(ExchangeVersion.Exchange2013)
+            service.Credentials = New WebCredentials("KMHP\username", "password")
+            service.TraceEnabled = True
+            service.TraceFlags = TraceFlags.All
+            service.AutodiscoverUrl("ijohnson@amerihealthcaritas.com", AddressOf RedirectionUrlValidationCallback)
+            Dim CalendarItemType As Appointment = New Appointment(service)
+            ' Meeting Title for tesing
+            'CalendarItemType.Subject = meetingTitle
+
+            CalendarItemType.Body = strTemplate
+            CalendarItemType.Start = oDate + " " + startTime
+            CalendarItemType.End = oDate + " " + endTime
+            CalendarItemType.Location = ddlLoc.SelectedItem.Text
+
+            'Get Meeting Pattern - 08/27/2018 - Isaac
+            Dim recurringStartDate As Date
+            Dim txtMeetEnd As Date
+
+            Dim dow As DayOfTheWeek() = New DayOfTheWeek() {CType(CalendarItemType.Start.DayOfWeek, DayOfTheWeek)}
+            If RadioButtonList1.SelectedItem.Text <> "Never" Then
+                If (RadioButtonList1.SelectedItem.Text = "Daily") Then
+                    recurringStartDate = DateAdd("d", 0, txtDate.Text)
+                    'recurringEndDate = DateAdd("d", 1, txtMeetTo.Text)
+                    CalendarItemType.Recurrence = New Recurrence.DailyPattern()
+
+                    txtMeetEnd = txtMeetTo.Text
+                    CalendarItemType.Recurrence.StartDate = recurringStartDate
+                    CalendarItemType.Recurrence.EndDate = txtMeetEnd
+
+
+                    'recurrMeeting.Recurrence.NumberOfOccurrences = 31
+                ElseIf (RadioButtonList1.SelectedItem.Text = "Weekly") Then
+                    recurringStartDate = DateAdd("d", 0, txtDate.Text)
+                    'recurringStartDate = DateAdd("d", 7, txtDate.Text)
+                    ' Weekly
+                    CalendarItemType.Recurrence = New Recurrence.WeeklyPattern(recurringStartDate, 1, dow)
+                    CalendarItemType.Recurrence.StartDate = recurringStartDate
+
+                    txtMeetEnd = txtMeetTo.Text
+                    CalendarItemType.Recurrence.StartDate = recurringStartDate
+                    CalendarItemType.Recurrence.EndDate = txtMeetEnd
+                    'CalendarItemType.Recurrence.NumberOfOccurrences = 4
+                ElseIf (RadioButtonList1.SelectedItem.Text = "Bi-Weekly") Then
+                    'recurringStartDate = DateAdd("d", 14, txtDate.Text)
+                    recurringStartDate = DateAdd("d", 0, txtDate.Text)
+                    ' Bi-Weekly
+                    CalendarItemType.Recurrence = New Recurrence.WeeklyPattern(recurringStartDate, 2, dow)
+                    CalendarItemType.Recurrence.StartDate = recurringStartDate
+
+                    txtMeetEnd = txtMeetTo.Text
+                    CalendarItemType.Recurrence.StartDate = recurringStartDate
+                    CalendarItemType.Recurrence.EndDate = txtMeetEnd
+                    'CalendarItemType.Recurrence.NumberOfOccurrences = 2
+                ElseIf (RadioButtonList1.SelectedItem.Text = "Monthly") Then
+
+                    recurringStartDate = DateAdd("m", 0, txtDate.Text)
+                    ' Monthly
+
+                    CalendarItemType.Recurrence = New Recurrence.WeeklyPattern(recurringStartDate, 5, dow)
+                    'CalendarItemType.Recurrence = New Recurrence.MonthlyPattern(recurringStartDate + startTime, 0, 0)
+                    CalendarItemType.Recurrence.StartDate = recurringStartDate
+
+                    txtMeetEnd = txtMeetTo.Text
+                    CalendarItemType.Recurrence.StartDate = recurringStartDate
+                    CalendarItemType.Recurrence.EndDate = txtMeetEnd
+                End If
+            End If
+
+            If strDomain = "prod" Then
+                CalendarItemType.Subject = "IDS Audio/Visual Request Confirmation"
+
+                For i As Integer = 0 To AttendeesArrProd.Length - 1
+                    CalendarItemType.RequiredAttendees.Add(AttendeesArrProd(i).ToString)
+                Next
+            Else
+                CalendarItemType.Subject = "IDS Audio/Visual Request Confirmation"
+                ' 
+                For i As Integer = 0 To AttendeesArrDev.Length - 1
+                    CalendarItemType.RequiredAttendees.Add(AttendeesArrDev(i).ToString)
+                Next
+
+            End If
+
+            CalendarItemType.ReminderMinutesBeforeStart = 60
+
+
+            CalendarItemType.Save(SendInvitationsMode.SendToAllAndSaveCopy)
+
+            CalendarItemType = Appointment.Bind(service, CalendarItemType.Id, New PropertySet(AppointmentSchema.Subject, AppointmentSchema.AppointmentType, AppointmentSchema.Recurrence, AppointmentSchema.FirstOccurrence, AppointmentSchema.LastOccurrence, AppointmentSchema.ModifiedOccurrences, AppointmentSchema.DeletedOccurrences, AppointmentSchema.EndTimeZone, AppointmentSchema.Body, AppointmentSchema.Start, AppointmentSchema.End))
+
+        Catch ex As Exception
+            Dim utilErrEmail As New UtilityServices.Err_Email
+            utilErrEmail.Email_Error = "AV Request Form (" & strDomain & "): Calendar Update Request"
+            utilErrEmail.Email_ErrorText = ex.ToString
+            utilErrEmail.SendEmail()
+            Response.Redirect("error.htm")
+
+        End Try
+    End Sub
+    Protected Sub valInquiry_ServerValidation(ByVal source As Object, ByVal args As ServerValidateEventArgs)
+        args.IsValid = cblItems.SelectedItem IsNot Nothing
+    End Sub
+
+    Public Function RedirectionUrlValidationCallback(ByVal redirectionUrl As String) As Boolean
+        Dim result As Boolean = False
+        Dim redirectionUri As Uri = New Uri(redirectionUrl)
+
+        If redirectionUri.Scheme = "https" Then
+            result = True
+        End If
+
+        Return result
+
+
+    End Function
+
+
+End Class
